@@ -1,4 +1,4 @@
-name: Build macOS Metal
+name: Build macOS Metal Vulkan
 
 on:
   workflow_call:
@@ -10,8 +10,8 @@ env:
   VCPKG_FORCE_DOWNLOADED_BINARIES: true
 
 jobs:
-  build-macos-metal:
-    name: build-macos-arm64-metal
+  build-macos-metal-vulkan:
+    name: build-macos-arm64-metal-vulkan
     runs-on: macos-15
     steps:
       - name: Checkout repo
@@ -28,6 +28,13 @@ jobs:
         uses: jwlawson/actions-setup-cmake@v2
         with:
           cmake-version: '3.29.0'
+
+      - name: Install MoltenVK
+        run: |
+          curl -L -O https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-macos-privateapi.tar
+          tar xf MoltenVK-macos-privateapi.tar
+          sudo mkdir -p /usr/local/lib
+          sudo cp MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib /usr/local/lib/
 
       - name: Bootstrap vcpkg
         run: bash ./dependencies/vcpkg/bootstrap-vcpkg.sh
@@ -53,7 +60,7 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DMACOS_BUNDLE=ON \
             -DENABLE_METAL=ON \
-            -DENABLE_VULKAN=OFF \
+            -DENABLE_VULKAN=ON \
             -G Ninja
 
       - name: Build Cemu
@@ -68,11 +75,11 @@ jobs:
           codesign --entitlements src/resource/cemu.macos.entitlements --force --deep --preserve-metadata=entitlements,requirements,flags,runtime --sign - --timestamp --options runtime bin/Cemu_app/Cemu.app/Contents/MacOS/Cemu
           ln -s /Applications bin/Cemu_app/Applications
           hdiutil create bin/tmp.dmg -ov -volname Cemu -fs HFS+ -srcfolder bin/Cemu_app
-          hdiutil convert bin/tmp.dmg -format UDZO -o bin/Cemu-macOS-arm64-Metal.dmg
+          hdiutil convert bin/tmp.dmg -format UDZO -o bin/Cemu-macOS-arm64-Metal-Vulkan.dmg
           rm bin/tmp.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: cemu-macos-arm64-metal
-          path: bin/Cemu-macOS-arm64-Metal.dmg
+          name: cemu-macos-arm64-metal-vulkan
+          path: bin/Cemu-macOS-arm64-Metal-Vulkan.dmg
