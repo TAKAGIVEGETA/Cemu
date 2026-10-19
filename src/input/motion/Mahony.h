@@ -179,7 +179,7 @@ private:
 		int m_yawWinding{};
 		// gyro bias
 		float m_gyroBias[3]{};
-		bool m_autoUpdateGyroBias{false};
+		bool m_autoUpdateGyroBias{true};
 		double m_gyroTotalSum[3]{};
 		uint64 m_gyroTotalSampleCount{};
 };

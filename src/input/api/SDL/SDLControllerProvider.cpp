@@ -122,7 +122,6 @@ bool SDLControllerProvider::start_gyro_calibration(SDL_JoystickID diid)
 	auto& state = s_motion_states[diid];
 	state.calibration = {};
 	state.calibration.active = true;
-	state.handler.enableGyroBiasEstimation(false);
 	cemuLog_log(LogType::Force, "SDL gyro calibration started for controller {}", diid);
 	return true;
 }
