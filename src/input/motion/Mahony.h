@@ -91,6 +91,11 @@ public:
 		m_gyroTotalSampleCount = 0;
 	}
 
+	void enableGyroBiasEstimation(bool enabled)
+	{
+		m_autoUpdateGyroBias = enabled;
+	}
+
 private:
 
 	// calculate roll, yaw and pitch in radians. (-0.5 to 0.5)
@@ -143,6 +148,9 @@ private:
 
 	void updateGyroBias(float gx, float gy, float gz)
 	{
+		if (!m_autoUpdateGyroBias)
+			return;
+
 		// dont let actual movement influence the bias
 		// but be careful about setting this too low, there are controllers out there with really bad bias (my Switch Pro had -0.0933 0.0619 0.0179 in resting state)
 		if (fabs(gx) >= 0.35f || fabs(gy) >= 0.35f || fabs(gz) >= 0.35f)
@@ -171,6 +179,7 @@ private:
 		int m_yawWinding{};
 		// gyro bias
 		float m_gyroBias[3]{};
+		bool m_autoUpdateGyroBias{false};
 		double m_gyroTotalSum[3]{};
 		uint64 m_gyroTotalSampleCount{};
 };

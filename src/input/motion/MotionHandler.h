@@ -35,6 +35,11 @@ public:
 		m_imu.setGyroBias(gx, gy, gz);
 	}
 
+	void enableGyroBiasEstimation(bool enabled)
+	{
+		m_imu.enableGyroBiasEstimation(enabled);
+	}
+
 	MotionSample getMotionSample()
 	{
 		float q[4];

@@ -122,6 +122,7 @@ bool SDLControllerProvider::start_gyro_calibration(SDL_JoystickID diid)
 	auto& state = s_motion_states[diid];
 	state.calibration = {};
 	state.calibration.active = true;
+	state.handler.enableGyroBiasEstimation(false);
 	cemuLog_log(LogType::Force, "SDL gyro calibration started for controller {}", diid);
 	return true;
 }
@@ -167,6 +168,7 @@ std::optional<glm::vec3> SDLControllerProvider::finish_gyro_calibration(SDL_Joys
 	}
 
 	state.handler.setGyroBias(gyro_bias.x, gyro_bias.y, gyro_bias.z);
+	state.handler.enableGyroBiasEstimation(false);
 	cemuLog_log(LogType::Force,
 		"SDL gyro calibration succeeded for controller {} with {} samples: bias=({:.4f}, {:.4f}, {:.4f}) rad/s",
 		diid, calibration.samples.size(), gyro_bias.x, gyro_bias.y, gyro_bias.z);
@@ -186,6 +188,7 @@ bool SDLControllerProvider::set_gyro_bias(SDL_JoystickID diid, const glm::vec3& 
 	std::scoped_lock lock(s_mutex);
 	auto& state = s_motion_states[diid];
 	state.handler.setGyroBias(gyro_bias.x, gyro_bias.y, gyro_bias.z);
+	state.handler.enableGyroBiasEstimation(false);
 	return true;
 }
 
