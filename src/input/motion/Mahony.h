@@ -80,6 +80,17 @@ public:
 		gBias[2] = m_gyroBias[2];
 	}
 
+	void setGyroBias(float gx, float gy, float gz)
+	{
+		m_gyroBias[0] = gx;
+		m_gyroBias[1] = gy;
+		m_gyroBias[2] = gz;
+		m_gyroTotalSum[0] = 0.0;
+		m_gyroTotalSum[1] = 0.0;
+		m_gyroTotalSum[2] = 0.0;
+		m_gyroTotalSampleCount = 0;
+	}
+
 private:
 
 	// calculate roll, yaw and pitch in radians. (-0.5 to 0.5)

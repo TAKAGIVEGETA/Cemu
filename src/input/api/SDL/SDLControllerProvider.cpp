@@ -6,6 +6,9 @@
 #include <SDL3/SDL.h>
 #include <boost/functional/hash.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 struct SDL_JoystickGUIDHash
 {
 	std::size_t operator()(const SDL_GUID& guid) const
@@ -111,6 +114,58 @@ MotionSample SDLControllerProvider::motion_sample(SDL_JoystickID diid)
 	std::shared_lock lock(s_mutex);
 	auto it = s_motion_states.find(diid);
 	return (it != s_motion_states.end()) ? it->second.data : MotionSample{};
+}
+
+bool SDLControllerProvider::start_gyro_calibration(SDL_JoystickID diid)
+{
+	std::scoped_lock lock(s_mutex);
+	auto& state = s_motion_states[diid];
+	state.calibration = MotionState::Calibration{};
+	state.calibration.active = true;
+	return true;
+}
+
+std::optional<glm::vec3> SDLControllerProvider::finish_gyro_calibration(SDL_JoystickID diid)
+{
+	std::scoped_lock lock(s_mutex);
+	auto it = s_motion_states.find(diid);
+	if (it == s_motion_states.end())
+		return {};
+
+	auto& state = it->second;
+	auto& calibration = state.calibration;
+	calibration.active = false;
+
+	const auto rejectedLimit = std::max<uint32_t>(1, calibration.sampleCount / 10);
+	if (calibration.sampleCount < kMinGyroCalibrationSamples ||
+		calibration.rejectedCount > rejectedLimit)
+	{
+		return {};
+	}
+
+	glm::vec3 gyro_bias{
+		(float)(calibration.sampleSum[0] / calibration.sampleCount),
+		(float)(calibration.sampleSum[1] / calibration.sampleCount),
+		(float)(calibration.sampleSum[2] / calibration.sampleCount)
+	};
+	state.handler.setGyroBias(gyro_bias.x, gyro_bias.y, gyro_bias.z);
+	return gyro_bias;
+}
+
+void SDLControllerProvider::cancel_gyro_calibration(SDL_JoystickID diid)
+{
+	std::scoped_lock lock(s_mutex);
+	auto it = s_motion_states.find(diid);
+	if (it != s_motion_states.end())
+		it->second.calibration.active = false;
+}
+
+bool SDLControllerProvider::set_gyro_bias(SDL_JoystickID diid, const glm::vec3& gyro_bias)
+{
+	std::scoped_lock lock(s_mutex);
+	auto& state = s_motion_states[diid];
+	state.handler.setGyroBias(gyro_bias.x, gyro_bias.y, gyro_bias.z);
+	return true;
 }
 
 void SDLControllerProvider::InitSDL()
@@ -255,6 +310,25 @@ void SDLControllerProvider::HandleSDLEvent(SDL_Event& event)
 				tracking.gyro[1] = -event.gsensor.data[1];
 				tracking.gyro[2] = -event.gsensor.data[2];
 				tracking.hasGyro = true;
+
+				if (state.calibration.active)
+				{
+					const auto angularSpeed = std::sqrt(
+						tracking.gyro.x * tracking.gyro.x +
+						tracking.gyro.y * tracking.gyro.y +
+						tracking.gyro.z * tracking.gyro.z);
+					if (angularSpeed < kMaxGyroCalibrationAngularSpeed)
+					{
+						state.calibration.sampleSum[0] += tracking.gyro.x;
+						state.calibration.sampleSum[1] += tracking.gyro.y;
+						state.calibration.sampleSum[2] += tracking.gyro.z;
+						++state.calibration.sampleCount;
+					}
+					else
+					{
+						++state.calibration.rejectedCount;
+					}
+				}
 			}
 			if (tracking.hasAcc && tracking.hasGyro)
 			{

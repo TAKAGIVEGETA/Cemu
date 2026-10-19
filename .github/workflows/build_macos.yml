@@ -1,0 +1,78 @@
+name: Build macOS Metal
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  VCPKG_ROOT: "${{github.workspace}}/dependencies/vcpkg"
+  VCPKG_BINARY_SOURCES: 'clear;nuget,GitHub,readwrite'
+  VCPKG_FORCE_DOWNLOADED_BINARIES: true
+
+jobs:
+  build-macos-metal:
+    name: build-macos-arm64-metal
+    runs-on: macos-15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          brew update
+          brew install nasm automake libtool mono
+
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.29.0'
+
+      - name: Bootstrap vcpkg
+        run: bash ./dependencies/vcpkg/bootstrap-vcpkg.sh
+
+      - name: Setup NuGet credentials for vcpkg
+        shell: bash
+        run: |
+          mono `./dependencies/vcpkg/vcpkg fetch nuget | tail -n 1` \
+            sources add \
+            -source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            -storepasswordincleartext \
+            -name "GitHub" \
+            -username "${{ github.repository_owner }}" \
+            -password "${{ secrets.GITHUB_TOKEN }}"
+          mono `./dependencies/vcpkg/vcpkg fetch nuget | tail -n 1` \
+            setapikey "${{ secrets.GITHUB_TOKEN }}" \
+            -source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+
+      - name: Configure Cemu
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DMACOS_BUNDLE=ON \
+            -DENABLE_METAL=ON \
+            -DENABLE_VULKAN=OFF \
+            -G Ninja
+
+      - name: Build Cemu
+        run: cmake --build build
+
+      - name: Prepare app bundle
+        run: |
+          mkdir bin/Cemu_app
+          mv bin/Cemu_release.app bin/Cemu_app/Cemu.app
+          mv bin/Cemu_app/Cemu.app/Contents/MacOS/Cemu_release bin/Cemu_app/Cemu.app/Contents/MacOS/Cemu
+          sed -i '' 's/Cemu_release/Cemu/g' bin/Cemu_app/Cemu.app/Contents/Info.plist
+          codesign --entitlements src/resource/cemu.macos.entitlements --force --deep --preserve-metadata=entitlements,requirements,flags,runtime --sign - --timestamp --options runtime bin/Cemu_app/Cemu.app/Contents/MacOS/Cemu
+          ln -s /Applications bin/Cemu_app/Applications
+          hdiutil create bin/tmp.dmg -ov -volname Cemu -fs HFS+ -srcfolder bin/Cemu_app
+          hdiutil convert bin/tmp.dmg -format UDZO -o bin/Cemu-macOS-arm64-Metal.dmg
+          rm bin/tmp.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: cemu-macos-arm64-metal
+          path: bin/Cemu-macOS-arm64-Metal.dmg

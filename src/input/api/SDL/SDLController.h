@@ -5,6 +5,8 @@
 
 #include <SDL3/SDL_gamepad.h>
 
+#include <optional>
+
 class SDLController : public Controller<SDLControllerProvider>
 {
 public:
@@ -30,6 +32,11 @@ public:
 	void stop_rumble() override;
 
 	MotionSample get_motion_sample() override;
+	bool start_gyro_calibration();
+	std::optional<glm::vec3> finish_gyro_calibration();
+	void cancel_gyro_calibration();
+	void save(pugi::xml_node& node) override;
+	void load(const pugi::xml_node& node) override;
 
 	std::string get_button_name(uint64 button) const override;
 	const SDL_GUID& get_guid() const { return m_guid; }
@@ -53,6 +60,8 @@ private:
 	bool m_has_gyro = false;
 	bool m_has_accel = false;
 	bool m_has_rumble = false;
+	glm::vec3 m_gyro_bias{};
+	bool m_has_gyro_bias = false;
 	
 	std::array<bool, SDL_GAMEPAD_BUTTON_COUNT> m_buttons{};
 	std::array<bool, SDL_GAMEPAD_AXIS_COUNT> m_axis{};

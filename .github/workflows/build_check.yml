@@ -15,4 +15,4 @@ on:
 
 jobs:
   build:
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build_macos.yml

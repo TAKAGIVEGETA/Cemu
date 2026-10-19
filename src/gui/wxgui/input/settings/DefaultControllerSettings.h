@@ -6,7 +6,13 @@
 
 #include "input/api/Controller.h"
 
+#include <chrono>
+#include <optional>
+
 class wxCheckBox;
+class wxButton;
+class wxStaticText;
+class SDLController;
 class wxInputDraw;
 
 class DefaultControllerSettings : public wxDialog
@@ -31,6 +37,9 @@ private:
 	wxSlider* m_rumble;
 
 	wxCheckBox* m_use_motion = nullptr;
+	wxButton* m_calibrate_gyro = nullptr;
+	wxStaticText* m_gyro_calibration_status = nullptr;
+	std::optional<std::chrono::steady_clock::time_point> m_gyro_calibration_deadline{};
 
 	wxInputDraw* m_axis_draw, * m_rotation_draw, *m_trigger_draw;
 
@@ -39,4 +48,7 @@ private:
 	void on_deadzone_change(wxCommandEvent& event);
 	void on_range_change(wxCommandEvent& event);
 	void on_rumble_change(wxCommandEvent& event);
+	void on_calibrate_gyro(wxCommandEvent& event);
+
+	std::shared_ptr<SDLController> m_sdl_controller;
 };

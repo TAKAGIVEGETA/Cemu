@@ -1,5 +1,7 @@
 #include "wxgui/input/settings/DefaultControllerSettings.h"
 
+#include "input/api/SDL/SDLController.h"
+
 #include <wx/sizer.h>
 #include <wx/stattext.h>
 #include <wx/slider.h>
@@ -19,6 +21,7 @@ DefaultControllerSettings::DefaultControllerSettings(wxWindow* parent, const wxP
 	: wxDialog(parent, wxID_ANY, _("Controller settings"), position, wxDefaultSize,
 	           wxDEFAULT_DIALOG_STYLE), m_controller(std::move(controller))
 {
+	m_sdl_controller = std::dynamic_pointer_cast<SDLController>(m_controller);
 	m_settings = m_controller->get_settings();
 	m_rumble_backup = m_settings.rumble;
 
@@ -36,6 +39,20 @@ DefaultControllerSettings::DefaultControllerSettings(wxWindow* parent, const wxP
 		m_use_motion->SetValue(m_settings.motion);
 		m_use_motion->Enable(m_controller->has_motion());
 		box_sizer->Add(m_use_motion, 0, wxEXPAND | wxALL, 5);
+
+		if (m_sdl_controller && m_sdl_controller->has_motion())
+		{
+			auto* gyro_sizer = new wxBoxSizer(wxHORIZONTAL);
+			m_calibrate_gyro = new wxButton(box, wxID_ANY, _("Calibrate gyro"));
+			m_calibrate_gyro->SetToolTip(_("Place the controller on a flat, stable surface"));
+			m_calibrate_gyro->Bind(wxEVT_BUTTON, &DefaultControllerSettings::on_calibrate_gyro, this);
+			gyro_sizer->Add(m_calibrate_gyro, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+
+			m_gyro_calibration_status = new wxStaticText(box, wxID_ANY, wxEmptyString);
+			m_gyro_calibration_status->SetMinSize(wxSize(260, -1));
+			gyro_sizer->Add(m_gyro_calibration_status, 1, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+			box_sizer->Add(gyro_sizer, 0, wxEXPAND, 0);
+		}
 
 		// Vibration
 		auto* rumbleSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -221,6 +238,9 @@ DefaultControllerSettings::DefaultControllerSettings(wxWindow* parent, const wxP
 
 DefaultControllerSettings::~DefaultControllerSettings()
 {
+	if (m_sdl_controller && m_gyro_calibration_deadline.has_value())
+		m_sdl_controller->cancel_gyro_calibration();
+
 	m_controller->stop_rumble();
 	m_timer->Stop();
 }
@@ -235,6 +255,26 @@ void DefaultControllerSettings::update_settings()
 
 void DefaultControllerSettings::on_timer(wxTimerEvent& event)
 {
+	if (m_gyro_calibration_deadline.has_value())
+	{
+		const auto remainingTime = *m_gyro_calibration_deadline - std::chrono::steady_clock::now();
+		if (remainingTime.count() > 0)
+		{
+			const auto remainingMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(remainingTime).count();
+			const auto remainingSeconds = (int)((remainingMilliseconds + 999) / 1000);
+			m_gyro_calibration_status->SetLabel(wxString::Format(_("Calibrating: %ds"), remainingSeconds));
+		}
+		else
+		{
+			const auto calibrated = m_sdl_controller && m_sdl_controller->finish_gyro_calibration().has_value();
+			m_gyro_calibration_status->SetLabel(calibrated ? _("Gyro calibrated") : _("Gyro calibration failed"));
+			m_gyro_calibration_status->SetForegroundColour(
+				wxTheColourDatabase->Find(calibrated ? "SUCCESS" : "ERROR"));
+			m_calibrate_gyro->Enable();
+			m_gyro_calibration_deadline.reset();
+		}
+	}
+
 	if (m_rumble_time.has_value() && std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_rumble_time.value()).count() > 500 )
 	{
 		m_controller->stop_rumble();
@@ -262,6 +302,20 @@ void DefaultControllerSettings::on_timer(wxTimerEvent& event)
 
 	m_trigger_draw->SetDeadzone(m_settings.trigger.deadzone);
 	m_trigger_draw->SetAxisValue(state.trigger);
+}
+
+void DefaultControllerSettings::on_calibrate_gyro(wxCommandEvent& event)
+{
+	if (!m_sdl_controller || !m_sdl_controller->start_gyro_calibration())
+	{
+		m_gyro_calibration_status->SetLabel(_("Gyro unavailable"));
+		return;
+	}
+
+	m_gyro_calibration_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+	m_calibrate_gyro->Disable();
+	m_gyro_calibration_status->SetLabel(_("Keep the controller still"));
+	m_gyro_calibration_status->SetForegroundColour(wxTheColourDatabase->Find("SUCCESS"));
 }
 
 void DefaultControllerSettings::on_close(wxCloseEvent& event)

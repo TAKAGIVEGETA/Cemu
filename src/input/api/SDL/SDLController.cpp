@@ -2,6 +2,10 @@
 
 #include "input/api/SDL/SDLControllerProvider.h"
 
+#include "util/helpers/helpers.h"
+
+#include <pugixml.hpp>
+
 SDLController::SDLController(const SDL_GUID& guid, size_t guid_index)
 	: base_type(fmt::format("{}_", guid_index), fmt::format("Controller {}", guid_index + 1)), m_guid_index(guid_index),
 	  m_guid(guid)
@@ -53,39 +57,46 @@ bool SDLController::connect()
 
 	m_has_rumble = false;
 	const auto index = m_provider->get_index(m_guid_index, m_guid);
-	std::scoped_lock lock(m_controller_mutex);
-
-	int gamepad_count = 0;
-
-	SDL_JoystickID *gamepad_ids = SDL_GetGamepads(&gamepad_count);
-
-	if (!gamepad_ids || index < 0 || index >= gamepad_count)
+	bool connected = false;
 	{
+		std::scoped_lock lock(m_controller_mutex);
+
+		int gamepad_count = 0;
+
+		SDL_JoystickID *gamepad_ids = SDL_GetGamepads(&gamepad_count);
+
+		if (!gamepad_ids || index < 0 || index >= gamepad_count)
+		{
+			SDL_free(gamepad_ids);
+			return false;
+		}
+
+		m_diid = gamepad_ids[index];
 		SDL_free(gamepad_ids);
-		return false;
+
+		m_controller = SDL_OpenGamepad(m_diid);
+
+		if (!m_controller)
+			return false;
+
+		if (const char* name = SDL_GetGamepadName(m_controller))
+			m_display_name = name;
+
+		for (size_t i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
+			m_buttons[i] = SDL_GamepadHasButton(m_controller, (SDL_GamepadButton)i);
+		for (size_t i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i)
+			m_axis[i] = SDL_GamepadHasAxis(m_controller, (SDL_GamepadAxis)i);
+		if (SDL_GamepadHasSensor(m_controller, SDL_SENSOR_ACCEL))
+			m_has_accel = SDL_SetGamepadSensorEnabled(m_controller, SDL_SENSOR_ACCEL, true);
+		if (SDL_GamepadHasSensor(m_controller, SDL_SENSOR_GYRO))
+			m_has_gyro = SDL_SetGamepadSensorEnabled(m_controller, SDL_SENSOR_GYRO, true);
+		m_has_rumble = SDL_RumbleGamepad(m_controller, 0, 0, 0);
+		connected = true;
 	}
 
-	m_diid = gamepad_ids[index];
-	SDL_free(gamepad_ids);
-
-	m_controller = SDL_OpenGamepad(m_diid);
-
-	if (!m_controller)
-		return false;
-
-	if (const char* name = SDL_GetGamepadName(m_controller))
-		m_display_name = name;
-
-	for (size_t i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
-		m_buttons[i] = SDL_GamepadHasButton(m_controller, (SDL_GamepadButton)i);
-	for (size_t i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i)
-		m_axis[i] = SDL_GamepadHasAxis(m_controller, (SDL_GamepadAxis)i);
-	if (SDL_GamepadHasSensor(m_controller, SDL_SENSOR_ACCEL))
-		m_has_accel = SDL_SetGamepadSensorEnabled(m_controller, SDL_SENSOR_ACCEL, true);
-	if (SDL_GamepadHasSensor(m_controller, SDL_SENSOR_GYRO))
-		m_has_gyro = SDL_SetGamepadSensorEnabled(m_controller, SDL_SENSOR_GYRO, true);
-	m_has_rumble = SDL_RumbleGamepad(m_controller, 0, 0, 0);
-	return true;
+	if (m_has_gyro_bias)
+		m_provider->set_gyro_bias(m_diid, m_gyro_bias);
+	return connected;
 }
 
 void SDLController::start_rumble()
@@ -111,6 +122,65 @@ MotionSample SDLController::get_motion_sample()
 	if (is_connected() && has_motion())
 		return m_provider->motion_sample(m_diid);
 	return {};
+}
+
+bool SDLController::start_gyro_calibration()
+{
+	if (!is_connected() || !has_motion())
+		return false;
+	return m_provider->start_gyro_calibration(m_diid);
+}
+
+std::optional<glm::vec3> SDLController::finish_gyro_calibration()
+{
+	auto gyro_bias = m_provider->finish_gyro_calibration(m_diid);
+	if (!gyro_bias.has_value())
+		return {};
+
+	m_gyro_bias = *gyro_bias;
+	m_has_gyro_bias = true;
+	return gyro_bias;
+}
+
+void SDLController::cancel_gyro_calibration()
+{
+	m_provider->cancel_gyro_calibration(m_diid);
+}
+
+void SDLController::save(pugi::xml_node& node)
+{
+	if (!m_has_gyro_bias)
+		return;
+
+	auto gyro_bias_node = node.append_child("gyro_bias");
+	gyro_bias_node.append_child("x").append_child(pugi::node_pcdata).set_value(
+		fmt::format("{}", m_gyro_bias.x).c_str());
+	gyro_bias_node.append_child("y").append_child(pugi::node_pcdata).set_value(
+		fmt::format("{}", m_gyro_bias.y).c_str());
+	gyro_bias_node.append_child("z").append_child(pugi::node_pcdata).set_value(
+		fmt::format("{}", m_gyro_bias.z).c_str());
+}
+
+void SDLController::load(const pugi::xml_node& node)
+{
+	const auto gyro_bias_node = node.child("gyro_bias");
+	if (!gyro_bias_node)
+		return;
+
+	const auto x = gyro_bias_node.child("x");
+	const auto y = gyro_bias_node.child("y");
+	const auto z = gyro_bias_node.child("z");
+	if (!x || !y || !z)
+		return;
+
+	m_gyro_bias = {
+		ConvertString<float>(x.child_value()),
+		ConvertString<float>(y.child_value()),
+		ConvertString<float>(z.child_value())
+	};
+	m_has_gyro_bias = true;
+	if (m_diid != -1)
+		m_provider->set_gyro_bias(m_diid, m_gyro_bias);
 }
 
 std::string SDLController::get_button_name(uint64 button) const

@@ -3,6 +3,9 @@
 #include "input/motion/MotionHandler.h"
 #include "input/api/ControllerProvider.h"
 
+#include <optional>
+#include <cstdint>
+
 static bool operator==(const SDL_GUID& g1, const SDL_GUID& g2)
 {
 	return memcmp(&g1, &g2, sizeof(SDL_GUID)) == 0;
@@ -23,6 +26,11 @@ public:
 	int get_index(size_t guid_index, const SDL_GUID& guid) const;
 
 	MotionSample motion_sample(SDL_JoystickID diid);
+
+	bool start_gyro_calibration(SDL_JoystickID diid);
+	std::optional<glm::vec3> finish_gyro_calibration(SDL_JoystickID diid);
+	void cancel_gyro_calibration(SDL_JoystickID diid);
+	bool set_gyro_bias(SDL_JoystickID diid, const glm::vec3& gyro_bias);
 
 	// exposed for manual event handling on macOS
 #if BOOST_OS_MACOS
@@ -62,8 +70,21 @@ private:
 		MotionSample data;
 		MotionInfoTracking tracking;
 
+		struct Calibration
+		{
+			bool active = false;
+			double sampleSum[3]{};
+			uint32_t sampleCount = 0;
+			uint32_t rejectedCount = 0;
+		};
+
+		Calibration calibration;
+
 		MotionState() = default;
 	};
 
 	inline static std::unordered_map<SDL_JoystickID, MotionState> s_motion_states{};
+
+	static constexpr uint32_t kMinGyroCalibrationSamples = 30;
+	static constexpr float kMaxGyroCalibrationAngularSpeed = 0.35f;
 };

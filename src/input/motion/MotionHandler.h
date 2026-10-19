@@ -30,6 +30,11 @@ public:
 		m_orientation[2] = _radToOrientation(m_imu.getRollRadians());
 	}
 
+	void setGyroBias(float gx, float gy, float gz)
+	{
+		m_imu.setGyroBias(gx, gy, gz);
+	}
+
 	MotionSample getMotionSample()
 	{
 		float q[4];
