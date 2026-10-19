@@ -6,6 +6,9 @@
 #include <optional>
 #include <cstdint>
 
+#include <array>
+#include <vector>
+
 static bool operator==(const SDL_GUID& g1, const SDL_GUID& g2)
 {
 	return memcmp(&g1, &g2, sizeof(SDL_GUID)) == 0;
@@ -73,9 +76,8 @@ private:
 		struct Calibration
 		{
 			bool active = false;
-			double sampleSum[3]{};
-			uint32_t sampleCount = 0;
-			uint32_t rejectedCount = 0;
+			std::vector<std::array<float, 3>> samples;
+			float maxAngularSpeed = 0.0f;
 		};
 
 		Calibration calibration;
@@ -85,6 +87,6 @@ private:
 
 	inline static std::unordered_map<SDL_JoystickID, MotionState> s_motion_states{};
 
-	static constexpr uint32_t kMinGyroCalibrationSamples = 30;
-	static constexpr float kMaxGyroCalibrationAngularSpeed = 0.35f;
+	static constexpr size_t kMinGyroCalibrationSamples = 20;
+	static constexpr float kGyroCalibrationMotionWarningSpeed = 0.35f;
 };

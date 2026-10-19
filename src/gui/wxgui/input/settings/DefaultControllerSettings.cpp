@@ -312,7 +312,7 @@ void DefaultControllerSettings::on_calibrate_gyro(wxCommandEvent& event)
 		return;
 	}
 
-	m_gyro_calibration_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+	m_gyro_calibration_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 	m_calibrate_gyro->Disable();
 	m_gyro_calibration_status->SetLabel(_("Keep the controller still"));
 	m_gyro_calibration_status->SetForegroundColour(wxTheColourDatabase->Find("SUCCESS"));

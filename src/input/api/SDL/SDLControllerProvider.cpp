@@ -120,8 +120,9 @@ bool SDLControllerProvider::start_gyro_calibration(SDL_JoystickID diid)
 {
 	std::scoped_lock lock(s_mutex);
 	auto& state = s_motion_states[diid];
-	state.calibration = MotionState::Calibration{};
+	state.calibration = {};
 	state.calibration.active = true;
+	cemuLog_log(LogType::Force, "SDL gyro calibration started for controller {}", diid);
 	return true;
 }
 
@@ -130,25 +131,45 @@ std::optional<glm::vec3> SDLControllerProvider::finish_gyro_calibration(SDL_Joys
 	std::scoped_lock lock(s_mutex);
 	auto it = s_motion_states.find(diid);
 	if (it == s_motion_states.end())
+	{
+		cemuLog_log(LogType::Force, "SDL gyro calibration failed for controller {}: motion state not found", diid);
 		return {};
+	}
 
 	auto& state = it->second;
 	auto& calibration = state.calibration;
 	calibration.active = false;
 
-	const auto rejectedLimit = std::max<uint32_t>(1, calibration.sampleCount / 10);
-	if (calibration.sampleCount < kMinGyroCalibrationSamples ||
-		calibration.rejectedCount > rejectedLimit)
+	if (calibration.samples.size() < kMinGyroCalibrationSamples)
 	{
+		cemuLog_log(LogType::Force, "SDL gyro calibration failed for controller {}: got {} samples, need at least {}",
+			diid, calibration.samples.size(), kMinGyroCalibrationSamples);
 		return {};
 	}
 
-	glm::vec3 gyro_bias{
-		(float)(calibration.sampleSum[0] / calibration.sampleCount),
-		(float)(calibration.sampleSum[1] / calibration.sampleCount),
-		(float)(calibration.sampleSum[2] / calibration.sampleCount)
-	};
+	glm::vec3 gyro_bias{};
+	for (size_t axis = 0; axis < 3; ++axis)
+	{
+		std::vector<float> axisSamples;
+		axisSamples.reserve(calibration.samples.size());
+		for (const auto& sample : calibration.samples)
+			axisSamples.emplace_back(sample[axis]);
+
+		std::nth_element(axisSamples.begin(), axisSamples.begin() + axisSamples.size() / 2, axisSamples.end());
+		gyro_bias[axis] = axisSamples[axisSamples.size() / 2];
+	}
+
+	if (calibration.maxAngularSpeed >= kGyroCalibrationMotionWarningSpeed)
+	{
+		cemuLog_log(LogType::Force,
+			"SDL gyro calibration for controller {} detected motion (max angular speed {:.3f} rad/s); keep the controller still if the result is inaccurate",
+			diid, calibration.maxAngularSpeed);
+	}
+
 	state.handler.setGyroBias(gyro_bias.x, gyro_bias.y, gyro_bias.z);
+	cemuLog_log(LogType::Force,
+		"SDL gyro calibration succeeded for controller {} with {} samples: bias=({:.4f}, {:.4f}, {:.4f}) rad/s",
+		diid, calibration.samples.size(), gyro_bias.x, gyro_bias.y, gyro_bias.z);
 	return gyro_bias;
 }
 
@@ -317,17 +338,13 @@ void SDLControllerProvider::HandleSDLEvent(SDL_Event& event)
 						tracking.gyro.x * tracking.gyro.x +
 						tracking.gyro.y * tracking.gyro.y +
 						tracking.gyro.z * tracking.gyro.z);
-					if (angularSpeed < kMaxGyroCalibrationAngularSpeed)
-					{
-						state.calibration.sampleSum[0] += tracking.gyro.x;
-						state.calibration.sampleSum[1] += tracking.gyro.y;
-						state.calibration.sampleSum[2] += tracking.gyro.z;
-						++state.calibration.sampleCount;
-					}
-					else
-					{
-						++state.calibration.rejectedCount;
-					}
+					state.calibration.maxAngularSpeed = std::max(
+						state.calibration.maxAngularSpeed, angularSpeed);
+					state.calibration.samples.push_back({
+						tracking.gyro.x,
+						tracking.gyro.y,
+						tracking.gyro.z
+					});
 				}
 			}
 			if (tracking.hasAcc && tracking.hasGyro)
