@@ -7,7 +7,6 @@
 #include <boost/functional/hash.hpp>
 
 #include <algorithm>
-#include <cmath>
 
 struct SDL_JoystickGUIDHash
 {
@@ -122,7 +121,6 @@ bool SDLControllerProvider::start_gyro_calibration(SDL_JoystickID diid)
 	auto& state = s_motion_states[diid];
 	state.calibration = {};
 	state.calibration.active = true;
-	cemuLog_log(LogType::Force, "SDL gyro calibration started for controller {}", diid);
 	return true;
 }
 
@@ -131,21 +129,14 @@ std::optional<glm::vec3> SDLControllerProvider::finish_gyro_calibration(SDL_Joys
 	std::scoped_lock lock(s_mutex);
 	auto it = s_motion_states.find(diid);
 	if (it == s_motion_states.end())
-	{
-		cemuLog_log(LogType::Force, "SDL gyro calibration failed for controller {}: motion state not found", diid);
 		return {};
-	}
 
 	auto& state = it->second;
 	auto& calibration = state.calibration;
 	calibration.active = false;
 
 	if (calibration.samples.size() < kMinGyroCalibrationSamples)
-	{
-		cemuLog_log(LogType::Force, "SDL gyro calibration failed for controller {}: got {} samples, need at least {}",
-			diid, calibration.samples.size(), kMinGyroCalibrationSamples);
 		return {};
-	}
 
 	glm::vec3 gyro_bias{};
 	for (size_t axis = 0; axis < 3; ++axis)
@@ -159,18 +150,8 @@ std::optional<glm::vec3> SDLControllerProvider::finish_gyro_calibration(SDL_Joys
 		gyro_bias[axis] = axisSamples[axisSamples.size() / 2];
 	}
 
-	if (calibration.maxAngularSpeed >= kGyroCalibrationMotionWarningSpeed)
-	{
-		cemuLog_log(LogType::Force,
-			"SDL gyro calibration for controller {} detected motion (max angular speed {:.3f} rad/s); keep the controller still if the result is inaccurate",
-			diid, calibration.maxAngularSpeed);
-	}
-
 	state.handler.setGyroBias(gyro_bias.x, gyro_bias.y, gyro_bias.z);
 	state.handler.enableGyroBiasEstimation(false);
-	cemuLog_log(LogType::Force,
-		"SDL gyro calibration succeeded for controller {} with {} samples: bias=({:.4f}, {:.4f}, {:.4f}) rad/s",
-		diid, calibration.samples.size(), gyro_bias.x, gyro_bias.y, gyro_bias.z);
 	return gyro_bias;
 }
 
@@ -336,12 +317,6 @@ void SDLControllerProvider::HandleSDLEvent(SDL_Event& event)
 
 				if (state.calibration.active)
 				{
-					const auto angularSpeed = std::sqrt(
-						tracking.gyro.x * tracking.gyro.x +
-						tracking.gyro.y * tracking.gyro.y +
-						tracking.gyro.z * tracking.gyro.z);
-					state.calibration.maxAngularSpeed = std::max(
-						state.calibration.maxAngularSpeed, angularSpeed);
 					state.calibration.samples.push_back({
 						tracking.gyro.x,
 						tracking.gyro.y,

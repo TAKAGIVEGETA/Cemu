@@ -77,7 +77,6 @@ private:
 		{
 			bool active = false;
 			std::vector<std::array<float, 3>> samples;
-			float maxAngularSpeed = 0.0f;
 		};
 
 		Calibration calibration;
@@ -88,5 +87,4 @@ private:
 	inline static std::unordered_map<SDL_JoystickID, MotionState> s_motion_states{};
 
 	static constexpr size_t kMinGyroCalibrationSamples = 20;
-	static constexpr float kGyroCalibrationMotionWarningSpeed = 0.35f;
 };
