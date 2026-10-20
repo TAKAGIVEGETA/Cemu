@@ -5,9 +5,10 @@ option(MACOS_BUNDLE "The executable when built on macOS will be created as an ap
 option(ALLOW_PORTABLE "Allow Cemu to be run in portable mode" ON)
 
 # used by CI script to set version:
-set(EMULATOR_VERSION_MAJOR "0" CACHE STRING "")
-set(EMULATOR_VERSION_MINOR "0" CACHE STRING "")
-set(EMULATOR_VERSION_PATCH "0" CACHE STRING "")
+set(EMULATOR_VERSION_MAJOR "2" CACHE STRING "")
+set(EMULATOR_VERSION_MINOR "6" CACHE STRING "")
+set(EMULATOR_VERSION_PATCH "11" CACHE STRING "")
+set(EMULATOR_VERSION_BUILD "1" CACHE STRING "")
 
 set(THREADS_PREFER_PTHREAD_FLAG true) # needs to be set before vcpkg
 
@@ -55,7 +56,7 @@ if (ENABLE_VCPKG)
 	endif()
 endif()
 
-project(Cemu VERSION 2.0.0)
+project(Cemu VERSION 2.6.11)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
@@ -69,6 +70,7 @@ add_compile_definitions($<$<CONFIG:Debug>:CEMU_DEBUG_ASSERT>) # if build type is
 add_definitions(-DEMULATOR_VERSION_MAJOR=${EMULATOR_VERSION_MAJOR})
 add_definitions(-DEMULATOR_VERSION_MINOR=${EMULATOR_VERSION_MINOR})
 add_definitions(-DEMULATOR_VERSION_PATCH=${EMULATOR_VERSION_PATCH})
+add_definitions(-DEMULATOR_VERSION_BUILD=${EMULATOR_VERSION_BUILD})
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 

@@ -124,11 +124,8 @@ std::optional<int> LaunchSettings::HandleCommandline(const std::vector<std::wstr
 		{
 			requireConsole();
 			std::string versionStr;
-#if EMULATOR_VERSION_PATCH == 0
-			versionStr = fmt::format("{}.{}{}", EMULATOR_VERSION_MAJOR, EMULATOR_VERSION_MINOR, EMULATOR_VERSION_SUFFIX);
-#else
-			versionStr = fmt::format("{}.{}-{}{}", EMULATOR_VERSION_MAJOR, EMULATOR_VERSION_MINOR, EMULATOR_VERSION_PATCH, EMULATOR_VERSION_SUFFIX);
-#endif
+			versionStr = fmt::format("{}.{}.{}.{}{}", EMULATOR_VERSION_MAJOR, EMULATOR_VERSION_MINOR,
+				EMULATOR_VERSION_PATCH, EMULATOR_VERSION_BUILD, EMULATOR_VERSION_SUFFIX);
 			std::cout << versionStr << std::endl;
 			return 0; // exit in main
 		}
